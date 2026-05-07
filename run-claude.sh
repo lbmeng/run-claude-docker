@@ -1085,7 +1085,7 @@ FROM claude-mcp AS final
 
 # Create entrypoint script that handles workspace directory change (as root)
 USER root
-RUN cat > /entrypoint.sh << 'EOF'
+RUN cat > /entrypoint.sh <<'EOF'
 #!/bin/sh
 
 # Merge Claude config from host file if available
@@ -1160,7 +1160,7 @@ EOF
 RUN chmod +x /entrypoint.sh
 
 # Create claude-exec wrapper script for proper environment setup in docker exec
-RUN cat > /usr/local/bin/claude-exec << 'EOF'
+RUN cat > /usr/local/bin/claude-exec <<'EOF'
 #!/bin/zsh
 
 # Change to workspace directory if available, fallback to home
@@ -1188,7 +1188,7 @@ USER $USERNAME
 WORKDIR /home/$USERNAME
 
 # Configure zsh with theme, plugins, and aliases
-RUN cat > ~/.zshrc << 'EOF'
+RUN cat > ~/.zshrc <<'EOF'
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
 plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
