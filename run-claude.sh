@@ -619,6 +619,12 @@ if [[ "$FORCE_PULL" == "true" && "$BUILD_ONLY" == "true" ]]; then
   exit 1
 fi
 
+if [[ "$FORCE_PULL" == "true" && "$FORCE_REBUILD" == "true" ]]; then
+  echo -e "${RED}Error: Cannot use --pull and --rebuild together${NC}"
+  echo -e "${YELLOW}Choose one: --pull (to pull latest image) or --rebuild (to force local rebuild)${NC}"
+  exit 1
+fi
+
 # Validate that --extra-package is only used with appropriate commands
 if [[ ${#EXTRA_PACKAGES[@]} -gt 0 ]]; then
   if [[ "$BUILD_ONLY" != "true" && "$FORCE_REBUILD" != "true" && -z "$EXPORT_DOCKERFILE" ]]; then
