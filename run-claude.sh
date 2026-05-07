@@ -1001,7 +1001,7 @@ generate_dockerfile_content() {
 # ============================================================================
 # Stage 1: Base tools and development environment
 # ============================================================================
-FROM ubuntu:25.04 AS base-tools
+FROM ubuntu:26.04 AS base-tools
 
 # Install system dependencies including zsh and tools
 RUN apt-get update && apt-get install -y \
