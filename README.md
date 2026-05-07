@@ -134,7 +134,7 @@ This behavior significantly reduces startup time and preserves any modifications
 
 The script contains a complete Dockerfile that includes:
 
-- Ubuntu 22.04 base image
+- Ubuntu 25.04 base image
 - Claude Code installation
 - Go, Node.js, Python, and build tools
 - Pre-built Unsplash MCP server
@@ -443,7 +443,7 @@ docker rm claude-code
 
 The `run-claude.sh` script is completely self-contained:
 
-1. **Embedded Dockerfile**: Contains a complete Ubuntu 22.04 setup with Claude Code
+1. **Embedded Dockerfile**: Contains a complete Ubuntu 25.04 setup with Claude Code
 2. **Auto-detection**: Checks if Docker image exists, pulls from Docker Hub if missing, builds only with `--build` or `--rebuild`
 3. **Container Persistence**: Reuses existing `claude-code` container for faster startup
 4. **MCP Setup**: Automatically configures Unsplash, Context7, and Playwright servers
