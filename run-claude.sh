@@ -656,6 +656,12 @@ fi
 
 DOCKER_CMD="$DOCKER_CMD --name $CONTAINER_NAME"
 
+# Start the container as root so the entrypoint can usermod the in-container
+# user to match host UID/GID before dropping privileges via gosu. The image's
+# USER directive is preserved, so subsequent docker exec calls still default
+# to the in-container user (resolved by name against the post-usermod passwd).
+DOCKER_CMD="$DOCKER_CMD --user 0:0"
+
 # Use host network to allow access to localhost services
 DOCKER_CMD="$DOCKER_CMD --network host"
 
@@ -962,6 +968,7 @@ generate_dockerfile_content() {
     "fd-find"
     "gpg"
     "git-delta"
+    "gosu"
   )
 
   # Add extra packages to the list
@@ -1087,6 +1094,63 @@ FROM claude-mcp AS final
 USER root
 RUN cat > /entrypoint.sh << 'EOF'
 #!/bin/sh
+
+TARGET_USER="${CONTAINER_USER:-claude-user}"
+TARGET_HOME="/home/${TARGET_USER}"
+
+# === Phase 1 (root): align TARGET_USER UID/GID to bind-mount owner, then
+# re-exec self via gosu so phase 2 runs as the (now correctly-mapped) user.
+# The script is invoked as root because run-claude.sh passes --user 0:0 on
+# docker run. docker exec calls bypass this branch (they enter as TARGET_USER
+# directly, courtesy of the image's USER directive).
+if [ "$(id -u)" = "0" ] && getent passwd "$TARGET_USER" >/dev/null 2>&1; then
+  REF_PATH=""
+  for candidate in "${TARGET_HOME}/.claude" "${WORKSPACE_PATH}" "${TARGET_HOME}"; do
+    if [ -n "$candidate" ] && [ -e "$candidate" ]; then
+      REF_PATH="$candidate"
+      break
+    fi
+  done
+
+  if [ -n "$REF_PATH" ]; then
+    TARGET_UID=$(stat -c %u "$REF_PATH")
+    TARGET_GID=$(stat -c %g "$REF_PATH")
+    CUR_UID=$(id -u "$TARGET_USER")
+    CUR_GID=$(id -g "$TARGET_USER")
+
+    if [ "$TARGET_UID" != "0" ] && { [ "$TARGET_UID" != "$CUR_UID" ] || [ "$TARGET_GID" != "$CUR_GID" ]; }; then
+      # Evict any user/group already occupying the target UID/GID
+      EXISTING_USER=$(getent passwd "$TARGET_UID" | cut -d: -f1)
+      if [ -n "$EXISTING_USER" ] && [ "$EXISTING_USER" != "$TARGET_USER" ]; then
+        userdel "$EXISTING_USER" 2>/dev/null || true
+      fi
+      EXISTING_GROUP=$(getent group "$TARGET_GID" | cut -d: -f1)
+      if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "$TARGET_USER" ]; then
+        groupdel "$EXISTING_GROUP" 2>/dev/null || true
+      fi
+
+      groupmod -g "$TARGET_GID" "$TARGET_USER" 2>/dev/null || true
+      usermod -u "$TARGET_UID" -g "$TARGET_GID" "$TARGET_USER"
+
+      if [ "$RUN_CLAUDE_VERBOSE" = "1" ]; then
+        echo "Re-owning ${TARGET_HOME} from UID:${CUR_UID} to UID:${TARGET_UID} (one-time, may take a minute)..."
+      fi
+
+      # Re-own files under home that were owned by the previous UID/GID
+      find "$TARGET_HOME" -xdev \( -uid "$CUR_UID" -o -gid "$CUR_GID" \) \
+        -exec chown -h "$TARGET_UID:$TARGET_GID" {} + 2>/dev/null || true
+
+      if [ "$RUN_CLAUDE_VERBOSE" = "1" ]; then
+        echo "Aligned ${TARGET_USER} UID:${CUR_UID}->${TARGET_UID} GID:${CUR_GID}->${TARGET_GID}"
+      fi
+    fi
+  fi
+
+  # Drop privileges and re-enter this script as TARGET_USER for phase 2.
+  exec gosu "$TARGET_USER" "$0" "$@"
+fi
+
+# === Phase 2 (TARGET_USER): config merge, GPG link, workspace cd, exec CMD.
 
 # Merge Claude config from host file if available
 if [ -f "$HOME/.claude.host.json" ]; then
